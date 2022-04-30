@@ -1,16 +1,4 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# ## setup envirionment
-
-# In[1]:
-
-
 import os
-
-
-# In[2]:
-
 
 class Config: 
     name = 'fp_exp3' 
@@ -72,12 +60,6 @@ class Config:
 
 xm_list = []
 
-
-# constants
-
-# In[3]:
-
-
 IGNORE_INDEX = -100
 NON_LABEL = -1
 OUTPUT_LABELS = ['O', 'B-Lead', 'I-Lead', 'B-Position', 'I-Position', 'B-Claim', 'I-Claim', 'B-Counterclaim', 'I-Counterclaim', 
@@ -105,25 +87,12 @@ PROB_THRESH = {
     "I-Rebuttal": 0.537,
 }
 
-
-# In[4]:
-
-
-import os
-
 if not os.path.exists(Config.model_dir):
     get_ipython().system('mkdir $Config.model_dir')
 
 if not os.path.exists(Config.output_dir):
     get_ipython().system('mkdir $Config.output_dir')
 
-
-# libraries
-
-# In[5]:
-
-
-# general
 import pandas as pd
 import numpy as np
 import random
@@ -140,15 +109,7 @@ from transformers import LongformerConfig, LongformerModel, LongformerTokenizerF
 from torch.utils.data import Dataset, DataLoader
 from torch.cuda.amp import autocast, GradScaler
 
-
-# In[6]:
-
-
 df_alltrain = pd.read_csv(f'{Config.data_dir}/corrected_train.csv') # 使用修复标签后的train.csv
-
-
-# In[7]:
-
 
 def agg_essays(train_flg):
 
@@ -162,10 +123,6 @@ def agg_essays(train_flg):
     df_texts['text_split'] = df_texts.text.str.split()
     print('Completed tokenizing texts.')
     return df_texts
-
-
-# In[8]:
-
 
 def ner(df_texts, df_train):
 
@@ -191,10 +148,6 @@ def ner(df_texts, df_train):
     print('Completed mapping discourse to each token.')
     return df_texts
 
-
-# In[9]:
-
-
 def preprocess(df_train = None):
 
     if df_train is None:
@@ -210,19 +163,9 @@ def preprocess(df_train = None):
 alltrain_texts = preprocess(df_alltrain)
 test_texts = preprocess()
 
-
-# In[10]:
-
-
 if Config.is_debug:
     alltrain_texts = alltrain_texts.sample(Config.debug_sample).reset_index(drop=True)
 print(len(alltrain_texts))
-
-
-# set seed & split train/test
-
-# In[11]:
-
 
 def seed_everything(seed=Config.random_seed):
 
@@ -242,10 +185,6 @@ else:
 
 print(f'Using device: {device}')
 
-
-# In[12]:
-
-
 def split_fold(df_train):
 
     ids = df_train['id'].unique()
@@ -256,12 +195,6 @@ def split_fold(df_train):
 
 alltrain_texts = split_fold(alltrain_texts)
 alltrain_texts.head()
-
-
-# ## dataset
-
-# In[13]:
-
 
 class FeedbackPrizeDataset(Dataset):
     def __init__(self, dataframe, tokenizer, max_len, has_labels):
@@ -306,12 +239,6 @@ class FeedbackPrizeDataset(Dataset):
 
         return item
 
-
-# ## model
-
-# In[14]:
-
-
 class FeedbackModel(nn.Module):
     def __init__(self):
         super(FeedbackModel, self).__init__()
@@ -341,10 +268,6 @@ class FeedbackModel(nn.Module):
         logits = (logits1 + logits2 + logits3 + logits4 + logits5) / 5 # 五层取平均
         return logits
 
-
-# In[15]:
-
-
 def build_model_tokenizer():
 
     if Config.model_savename == 'longformer':
@@ -354,12 +277,6 @@ def build_model_tokenizer():
     model = FeedbackModel()
 
     return model, tokenizer
-
-
-# ## utility function
-
-# In[16]:
-
 
 def active_logits(raw_logits, word_ids):
     word_ids = word_ids.view(-1) # 打平成1维
@@ -379,12 +296,6 @@ def active_preds_prob(active_logits):
     active_preds = torch.argmax(active_logits, axis = 1) # argmax
     active_preds_prob, _ = torch.max(active_logits, axis = 1) # max
     return active_preds, active_preds_prob
-
-
-# ## evaluating function
-
-# In[17]:
-
 
 def calc_overlap(row):
 
@@ -452,12 +363,6 @@ def oof_score(df_val, oof):
         f1score.append(f1)
     f1avg = np.mean(f1score)
     return f1avg
-
-
-# ## inferencing function
-
-# In[18]:
-
 
 def inference(model, dl, criterion, valid_flg):
 
@@ -534,10 +439,6 @@ def preds_class_prob(all_logits, dl):
             final_predictions_score.append(predictions_prob)
     return final_predictions, final_predictions_score
 
-
-# In[19]:
-
-
 def get_preds_onefold(model, df, dl, criterion, valid_flg):
     logits, valid_loss, valid_acc = inference(model, dl, criterion, valid_flg) # 推理出logits
     all_preds, all_preds_prob = preds_class_prob(logits, dl) # 整理出class和score
@@ -567,12 +468,6 @@ def post_process_pred(df, all_preds, all_preds_prob):
     df_pred = pd.DataFrame(final_preds)
     df_pred.columns = ['id', 'class', 'new_predictionstring']
     return df_pred
-
-
-# ## training and validating function
-
-# In[20]:
-
 
 def train_fn(model, dl_train, optimizer, epoch, criterion):
     model.train()
@@ -617,10 +512,6 @@ def train_fn(model, dl_train, optimizer, epoch, criterion):
     print(f'epoch {epoch} - training loss: {epoch_loss:.4f}')
     print(f'epoch {epoch} - training accuracy: {epoch_accuracy:.4f}')
 
-
-# In[21]:
-
-
 def valid_fn(model, df_val, df_val_eval, dl_val, epoch, criterion):
     oof, valid_loss, valid_acc  = get_preds_onefold(model, df_val, dl_val, criterion, valid_flg=True) # 获取预测结果
     f1score =[]
@@ -637,14 +528,6 @@ def valid_fn(model, df_val, df_val_eval, dl_val, epoch, criterion):
     f1avg = np.mean(f1score)
     print(f'Overall Validation avg F1: {f1avg:.4f} val_loss:{valid_loss:.4f} val_accuracy:{valid_acc:.4f}')
     return valid_loss, oof
-
-
-# ## training loop
-# 
-# 
-
-# In[23]:
-
 
 oof = pd.DataFrame()
 for i_fold in range(Config.n_fold):
@@ -680,10 +563,6 @@ for i_fold in range(Config.n_fold):
             print(f'{model_filename} saved')
 
     oof = pd.concat([oof, _oof_fold_best])
-
-
-# In[ ]:
-
 
 print(f'overall cv score: {oof_score(df_train, oof)}')
 
